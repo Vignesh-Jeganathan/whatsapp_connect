@@ -58,7 +58,7 @@ async def receive_webhook(request: Request):
     print(f"phone number {phone_number_id}")
     print(f"from {sender}")
     print(f"body param {message_body}")
-    graph_url = f"https://graph.facebook.com/v13.0/{phone_number_id}/messages"
+    graph_url = f"https://graph.facebook.com/v25.0/{phone_number_id}/messages"
     payload = {
         "messaging_product": "whatsapp",
         "to": sender,
