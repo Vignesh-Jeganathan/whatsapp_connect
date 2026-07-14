@@ -1,5 +1,6 @@
 import json
 import os
+
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -11,9 +12,11 @@ app = FastAPI()
 TOKEN = os.getenv("TOKEN")
 MYTOKEN = os.getenv("MYTOKEN")
 
+
 @app.get("/")
 def home():
     return Response(content="hello this is webhook setup", status_code=200)
+
 
 @app.get("/webhook")
 def verify_webhook(
@@ -32,6 +35,7 @@ def verify_webhook(
 
     raise HTTPException(status_code=400, detail="Missing verification parameters")
 
+
 @app.post("/webhook")
 async def receive_webhook(request: Request):
     try:
@@ -39,25 +43,40 @@ async def receive_webhook(request: Request):
     except json.JSONDecodeError:
         body_param = {}
 
-    print(json.dumps(body_param, indent=2))
+    print(json.dumps(body_param, indent=2), flush=True)
 
     if not body_param.get("object"):
         raise HTTPException(status_code=404)
 
-    print("inside body param")
+    print("inside body param", flush=True)
 
     try:
         value = body_param["entry"][0]["changes"][0]["value"]
-        message = value["messages"][0]
         phone_number_id = value["metadata"]["phone_number_id"]
+        messages = value.get("messages", [])
+
+        if not messages:
+            print("No message found. This may be a delivery/read status webhook.", flush=True)
+            return Response(status_code=200)
+
+        message = messages[0]
         sender = message["from"]
-        message_body = message["text"]["body"]
+        message_body = message.get("text", {}).get("body")
     except (KeyError, IndexError, TypeError):
         raise HTTPException(status_code=404)
 
-    print(f"phone number {phone_number_id}")
-    print(f"from {sender}")
-    print(f"body param {message_body}")
+    if not message_body:
+        print("Message received, but it is not a text message.", flush=True)
+        return Response(status_code=200)
+
+    print(f"phone number {phone_number_id}", flush=True)
+    print(f"from {sender}", flush=True)
+    print(f"user message {message_body}", flush=True)
+
+    if not TOKEN:
+        print("TOKEN environment variable is missing.", flush=True)
+        raise HTTPException(status_code=500, detail="TOKEN environment variable is missing")
+
     graph_url = f"https://graph.facebook.com/v25.0/{phone_number_id}/messages"
     payload = {
         "messaging_product": "whatsapp",
@@ -75,7 +94,13 @@ async def receive_webhook(request: Request):
         headers=headers,
         timeout=15,
     )
-    response.raise_for_status()
+
+    print(f"Meta API status: {response.status_code}", flush=True)
+    print(f"Meta API response: {response.text}", flush=True)
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=500, detail="Failed to send WhatsApp reply")
+
     return Response(status_code=200)
 
 if __name__ == "__main__":
